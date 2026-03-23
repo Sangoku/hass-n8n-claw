@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "slug": "hass-n8n-claw",
   "description": "n8n AI agent (n8n-claw) as a Home Assistant addon — includes PostgREST, auto-migration and workflow import",
-  "url": "https://github.com/your-repo/hass-n8n-claw",
+  "url": "https://github.com/Sangoku/hass-n8n-claw",
   "hassio_api": true,
   "hassio_role": "default",
   "homeassistant_api": true,
@@ -56,7 +56,7 @@
     "n8n_encryption_key": "",
     "n8n_webhook_url": "",
     "n8n_owner_email": "admin@n8n-claw.local",
-    "n8n_owner_password": "n8nclaw123",
+    "n8n_owner_password": "",
     "env_vars_list": [],
     "cmd_line_args": ""
   },

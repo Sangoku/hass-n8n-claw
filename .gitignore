@@ -5,10 +5,27 @@
 # Local test overrides
 .env
 .env.local
+dev/.env
 
 # IDE
 .idea/
 .vscode/
+*.swp
+*.swo
 
 # macOS
 .DS_Store
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Docker volumes (local dev)
+postgres_data/
+n8n_claw_data/

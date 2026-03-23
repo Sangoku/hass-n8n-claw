@@ -1,4 +1,4 @@
-FROM n8nio/n8n:latest AS base
+FROM n8nio/n8n:latest
 
 ARG NGINX_ALLOWED_IP=172.30.32.2
 ENV NGINX_ALLOWED_IP=${NGINX_ALLOWED_IP}
@@ -89,12 +89,3 @@ RUN chmod +x /app/n8n-entrypoint.sh \
     && chmod +x /app/ha-integration.sh
 
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
-
-
-# Stage for local end-to-end testing (simulates HA ingress)
-FROM base AS hass-n8n-claw-end-to-end-test
-# (add test nginx config here if needed)
-
-
-# Final stage used by Home Assistant
-FROM base AS final

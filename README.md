@@ -2,7 +2,7 @@
 
 **n8n-claw AI agent as a Home Assistant addon.**
 
-This addon packages the [n8n-claw](../n8n-claw/) AI agent stack into a single Home Assistant addon container. It includes:
+This addon packages the [n8n-claw](https://github.com/Sangoku/n8n-claw) AI agent stack into a single Home Assistant addon container. It includes:
 
 - **n8n** — workflow automation engine (via HA Ingress on port 5690)
 - **PostgREST** — REST API over PostgreSQL (internal, port 3000)
@@ -226,4 +226,4 @@ These services from the original n8n-claw stack are **not included** in this add
 - **searxng** — private search engine
 - **email-bridge** — SMTP/IMAP bridge
 
-See [n8n-claw README](../n8n-claw/README.md) for setup instructions.
+See [n8n-claw README](https://github.com/Sangoku/n8n-claw) for setup instructions.

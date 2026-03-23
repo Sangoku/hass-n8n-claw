@@ -1,0 +1,18 @@
+{
+  "timezone": "Europe/Berlin",
+  "db_host": "postgres",
+  "db_port": 5432,
+  "db_name": "n8n_claw",
+  "db_user": "postgres",
+  "db_password": "postgres",
+  "postgrest_jwt_secret": "",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+  "anthropic_api_key": "",
+  "n8n_encryption_key": "",
+  "n8n_webhook_url": "http://localhost:8081",
+  "n8n_owner_email": "admin@n8n-claw.local",
+  "n8n_owner_password": "n8nclaw123",
+  "env_vars_list": [],
+  "cmd_line_args": ""
+}

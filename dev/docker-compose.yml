@@ -1,0 +1,88 @@
+name: n8n-claw-dev
+
+# Local dev environment for hass-n8n-claw addon testing
+# Simulates the HA addon environment without a real Home Assistant Supervisor.
+#
+# Usage:
+#   cd dev/
+#   cp .env.example .env
+#   # Edit .env with your real API keys
+#   docker compose up --build
+#
+# Access:
+#   n8n UI:      http://localhost:5690  (via nginx, simulates HA Ingress)
+#   n8n direct:  http://localhost:5678  (direct n8n port)
+#   PostgREST:   http://localhost:3000  (exposed for dev inspection)
+#   PostgreSQL:  localhost:5433
+
+services:
+
+  # ── PostgreSQL (simulates Expaso TimescaleDB HA addon) ──────────────────────
+  postgres:
+    container_name: n8n-claw-dev-postgres
+    image: timescale/timescaledb-ha:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-n8n_claw}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TZ: ${TZ:-Europe/Berlin}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-n8n_claw}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── hass-n8n-claw addon container ──────────────────────────────────────────
+  n8n-claw:
+    container_name: n8n-claw-dev-addon
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        NGINX_ALLOWED_IP: "all"
+        BUILD_VERSION: "dev"
+        BUILD_ARCH: "amd64"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      # Dummy supervisor token — n8n-exports.sh handles curl failures gracefully
+      SUPERVISOR_TOKEN: "dev-token"
+      # Allow nginx to accept connections from any IP (dev mode)
+      NGINX_ALLOWED_IP: "all"
+      # Pass API key for workflow-import (set after first n8n login)
+      N8N_API_KEY: ${N8N_API_KEY:-}
+    ports:
+      - "5690:5690"   # nginx → n8n (simulates HA Ingress)
+      - "5678:5678"   # n8n direct
+      - "8081:8081"   # n8n webhook port
+      - "3000:3000"   # PostgREST (dev inspection)
+    volumes:
+      # Mock HA Supervisor options.json — edit dev/options.json to change addon config
+      - ./options.json:/data/options.json:ro
+      # Persistent n8n data (credentials, workflows, encryption key)
+      - n8n_claw_data:/data/n8n-claw
+      # Live-edit addon scripts without rebuilding the image
+      - ../n8n-exports.sh:/app/n8n-exports.sh:ro
+      - ../n8n-entrypoint.sh:/app/n8n-entrypoint.sh:ro
+      - ../nginx-entrypoint.sh:/app/nginx-entrypoint.sh:ro
+      - ../postgrest-entrypoint.sh:/app/postgrest-entrypoint.sh:ro
+      - ../db-init.sh:/app/db-init.sh:ro
+      - ../workflow-import.sh:/app/workflow-import.sh:ro
+      - ../ha-integration.sh:/app/ha-integration.sh:ro
+      # Live-edit migrations and workflows
+      - ../migrations:/app/migrations:ro
+      - ../seed:/app/seed:ro
+      - ../workflows:/app/workflows:ro
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  n8n_claw_data:
