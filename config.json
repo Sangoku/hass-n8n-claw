@@ -1,0 +1,83 @@
+{
+  "name": "n8n-claw",
+  "version": "1.0.0",
+  "slug": "hass-n8n-claw",
+  "description": "n8n AI agent (n8n-claw) as a Home Assistant addon — includes PostgREST, auto-migration and workflow import",
+  "url": "https://github.com/your-repo/hass-n8n-claw",
+  "hassio_api": true,
+  "hassio_role": "default",
+  "homeassistant_api": true,
+  "arch": [
+    "aarch64",
+    "amd64"
+  ],
+  "backup_exclude": [
+    "n8n-claw/.cache",
+    "n8n-claw/.n8n/n8nEventLog*.log",
+    "n8n-claw/.n8n/crash.journal",
+    "supervisord.log*"
+  ],
+  "startup": "application",
+  "boot": "auto",
+  "icon": "icon.png",
+  "logo": "logo.png",
+  "panel_icon": "mdi:robot",
+  "webui": "http://[HOST]:[PORT:5690]/",
+  "map": [
+    "ssl:ro",
+    "backup:rw",
+    "share:rw",
+    "media:rw",
+    "config:ro"
+  ],
+  "ingress": true,
+  "ingress_port": 5690,
+  "ingress_stream": true,
+  "ports": {
+    "5678/tcp": null,
+    "8081/tcp": 8081
+  },
+  "ports_description": {
+    "5678/tcp": "n8n direct port (optional — use Ingress instead for security)",
+    "8081/tcp": "n8n webhook/API port for external integrations (Telegram, etc.)"
+  },
+  "apparmor": true,
+  "options": {
+    "timezone": "Europe/Berlin",
+    "db_host": "172.30.32.1",
+    "db_port": 5432,
+    "db_name": "n8n-claw",
+    "db_user": "postgres",
+    "db_password": "",
+    "postgrest_jwt_secret": "",
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "anthropic_api_key": "",
+    "n8n_encryption_key": "",
+    "n8n_webhook_url": "",
+    "n8n_owner_email": "admin@n8n-claw.local",
+    "n8n_owner_password": "n8nclaw123",
+    "env_vars_list": [],
+    "cmd_line_args": ""
+  },
+  "schema": {
+    "timezone": "str",
+    "db_host": "str",
+    "db_port": "int",
+    "db_name": "str",
+    "db_user": "str",
+    "db_password": "str",
+    "postgrest_jwt_secret": "str",
+    "telegram_bot_token": "str",
+    "telegram_chat_id": "str",
+    "anthropic_api_key": "str",
+    "n8n_encryption_key": "str?",
+    "n8n_webhook_url": "str?",
+    "n8n_owner_email": "str?",
+    "n8n_owner_password": "str?",
+    "env_vars_list": [
+      "match(^[A-Z_0-9]+: .*$)"
+    ],
+    "cmd_line_args": "str?"
+  }
+}

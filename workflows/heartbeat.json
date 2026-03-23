@@ -1,0 +1,202 @@
+{
+  "name": "💓 Heartbeat",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Context": {
+      "main": [
+        [
+          {
+            "node": "Has Actionable Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Actionable Items": {
+      "main": [
+        [
+          {
+            "node": "Call Claude Haiku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Claude Haiku": {
+      "main": [
+        [
+          {
+            "node": "Should Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send": {
+      "main": [
+        [
+          {
+            "node": "Telegram Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Send": {
+      "main": [
+        [
+          {
+            "node": "Update Heartbeat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Load tasks, user preferences, heartbeat state, and recent memories\nconst SUPABASE_URL = '{{SUPABASE_URL}}';\nconst SUPABASE_KEY = '{{SUPABASE_SERVICE_KEY}}';\nconst CHAT_ID = '{{TELEGRAM_CHAT_ID}}';\nconst http = this.helpers.httpRequest;\n\nasync function pgrest(path) {\n  const res = await http({\n    method: 'GET',\n    url: `${SUPABASE_URL}${path}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true\n  });\n  return typeof res.body === 'string' ? JSON.parse(res.body) : res.body;\n}\n\nconst userId = `telegram:${CHAT_ID}`;\n\n// Load all context in parallel\nconst [tasks, profiles, heartbeatCfg, briefingCfg, recentMemory, soul] = await Promise.all([\n  pgrest(`/rest/v1/tasks?user_id=eq.${encodeURIComponent(userId)}&status=in.(pending,in_progress)&order=due_date.asc.nullslast,priority.desc`),\n  pgrest(`/rest/v1/user_profiles?user_id=eq.${encodeURIComponent(userId)}&select=display_name,timezone,preferences`),\n  pgrest('/rest/v1/heartbeat_config?check_name=eq.heartbeat&select=config,last_run,enabled'),\n  pgrest('/rest/v1/heartbeat_config?check_name=eq.morning_briefing&select=config,last_run,enabled'),\n  pgrest('/rest/v1/memory_long?order=created_at.desc&limit=3&select=content,category'),\n  pgrest('/rest/v1/soul?key=eq.name&select=content')\n]);\n\nconst profile = (Array.isArray(profiles) && profiles.length > 0) ? profiles[0] : {};\nconst prefs = profile.preferences || {};\nconst tz = profile.timezone || 'Europe/Berlin';\nconst botName = (Array.isArray(soul) && soul.length > 0) ? soul[0].content : 'Assistant';\n\n// Current time in user's timezone\nconst now = new Date();\nconst userTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));\nconst currentHour = userTime.getHours();\nconst currentMinute = userTime.getMinutes();\n\n// Heartbeat state\nconst hbEnabled = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0) ? heartbeatCfg[0].enabled : false;\nconst hbLastRun = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0 && heartbeatCfg[0].last_run) ? new Date(heartbeatCfg[0].last_run) : null;\nconst hbMinInterval = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0 && heartbeatCfg[0].config) ? (heartbeatCfg[0].config.min_interval_hours || 2) : 2;\n\n// Morning briefing state\nconst mbEnabled = (Array.isArray(briefingCfg) && briefingCfg.length > 0) ? briefingCfg[0].enabled : false;\nconst mbLastRun = (Array.isArray(briefingCfg) && briefingCfg.length > 0 && briefingCfg[0].last_run) ? new Date(briefingCfg[0].last_run) : null;\nconst mbPrefs = prefs.morning_briefing || {};\nconst mbTime = mbPrefs.time || '08:00';\nconst [mbHour, mbMinute] = mbTime.split(':').map(Number);\n\n// Categorize tasks\nconst overdue = (Array.isArray(tasks) ? tasks : []).filter(t => t.due_date && new Date(t.due_date) < now);\nconst dueToday = (Array.isArray(tasks) ? tasks : []).filter(t => {\n  if (!t.due_date) return false;\n  const d = new Date(t.due_date);\n  return d.toDateString() === userTime.toDateString() && d >= now;\n});\nconst urgent = (Array.isArray(tasks) ? tasks : []).filter(t => t.priority === 'urgent');\n\n// Check if morning briefing should fire\nlet shouldBrief = false;\nlet briefingReason = '';\nif (mbEnabled && mbPrefs.enabled) {\n  const timeDiff = (currentHour * 60 + currentMinute) - (mbHour * 60 + mbMinute);\n  const isInWindow = timeDiff >= 0 && timeDiff < 15;\n  const alreadyBriefedToday = mbLastRun && mbLastRun.toDateString() === userTime.toDateString();\n  const mbHoursSinceLastRun = mbLastRun ? (now.getTime() - mbLastRun.getTime()) / (1000 * 60 * 60) : 999;\n  if (isInWindow && !alreadyBriefedToday && mbHoursSinceLastRun >= 1) {\n    shouldBrief = true;\n    briefingReason = 'morning_briefing';\n  }\n}\n\n// Check if proactive message should fire (rate-limited)\nlet shouldProactive = false;\nif (hbEnabled && !shouldBrief) {\n  const hoursSinceLastRun = hbLastRun ? (now.getTime() - hbLastRun.getTime()) / (1000 * 60 * 60) : 999;\n  if (hoursSinceLastRun >= hbMinInterval) {\n    if (overdue.length > 0 || urgent.length > 0) {\n      shouldProactive = true;\n    }\n  }\n}\n\nreturn [{ json: {\n  hasAction: shouldBrief || shouldProactive,\n  reason: shouldBrief ? briefingReason : (shouldProactive ? 'proactive' : 'none'),\n  botName,\n  userName: profile.display_name || 'User',\n  timezone: tz,\n  currentTime: userTime.toISOString(),\n  tasks: Array.isArray(tasks) ? tasks : [],\n  overdue: overdue.map(t => ({ id: t.id, title: t.title, priority: t.priority, due_date: t.due_date })),\n  dueToday: dueToday.map(t => ({ id: t.id, title: t.title, priority: t.priority, due_date: t.due_date })),\n  urgent: urgent.map(t => ({ id: t.id, title: t.title, due_date: t.due_date })),\n  totalPending: Array.isArray(tasks) ? tasks.length : 0,\n  recentMemory: Array.isArray(recentMemory) ? recentMemory.map(m => m.content) : [],\n  isMorningBriefing: shouldBrief,\n  language: prefs.language || 'English'\n}}];"
+      },
+      "id": "load-context",
+      "name": "Load Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-action",
+              "leftValue": "={{ $json.hasAction }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-action",
+      "name": "Has Actionable Items",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Call Claude Haiku to compose a proactive message (or SKIP)\nconst SUPABASE_URL = '{{SUPABASE_URL}}';\nconst SUPABASE_KEY = '{{SUPABASE_SERVICE_KEY}}';\nconst http = this.helpers.httpRequest;\n\n// Get Anthropic API key from DB\nconst cfgResp = await http({\n  method: 'GET',\n  url: `${SUPABASE_URL}/rest/v1/tools_config?tool_name=eq.anthropic&select=config`,\n  headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' }\n});\nconst apiKey = (Array.isArray(cfgResp) && cfgResp.length > 0) ? cfgResp[0].config.api_key : null;\nif (!apiKey) return [{ json: { message: 'SKIP', error: 'No Anthropic API key configured' } }];\n\nconst ctx = $input.first().json;\n\nlet systemPrompt;\nconst lang = ctx.language || 'English';\nif (ctx.isMorningBriefing) {\n  systemPrompt = `You are ${ctx.botName}, a personal assistant. Compose a morning briefing for ${ctx.userName}. Include: a friendly greeting, today's tasks (if any), overdue tasks (if any), and a motivating note. Keep it SHORT (3-5 sentences). Use a natural, warm tone. Respond in ${lang}. Current time: ${ctx.currentTime} (${ctx.timezone}).`;\n} else {\n  systemPrompt = `You are ${ctx.botName}, a personal assistant. You are proactively checking in with ${ctx.userName}. There are overdue or urgent tasks that need attention. Compose a SHORT reminder (1-3 sentences). Be helpful, not annoying. If nothing seems worth messaging about, respond with exactly the word SKIP and nothing else. Respond in ${lang}. Current time: ${ctx.currentTime} (${ctx.timezone}).`;\n}\n\nlet userMsg = '';\nif (ctx.overdue.length > 0) userMsg += `Overdue tasks:\\n${ctx.overdue.map(t => `- ${t.title} (due: ${t.due_date}, priority: ${t.priority})`).join('\\n')}\\n\\n`;\nif (ctx.dueToday.length > 0) userMsg += `Due today:\\n${ctx.dueToday.map(t => `- ${t.title} (priority: ${t.priority})`).join('\\n')}\\n\\n`;\nif (ctx.urgent.length > 0) userMsg += `Urgent:\\n${ctx.urgent.map(t => `- ${t.title}`).join('\\n')}\\n\\n`;\nuserMsg += `Total pending tasks: ${ctx.totalPending}\\n`;\nif (ctx.recentMemory.length > 0) userMsg += `\\nRecent context:\\n${ctx.recentMemory.join('\\n')}`;\n\nconst response = await http({\n  method: 'POST',\n  url: 'https://api.anthropic.com/v1/messages',\n  headers: {\n    'x-api-key': apiKey,\n    'anthropic-version': '2023-06-01',\n    'content-type': 'application/json'\n  },\n  body: {\n    model: 'claude-haiku-4-5-20251001',\n    max_tokens: 512,\n    system: systemPrompt,\n    messages: [{ role: 'user', content: userMsg }]\n  }\n});\n\nconst message = (response.content && response.content[0]) ? response.content[0].text : 'SKIP';\nreturn [{ json: { message, reason: ctx.reason, isMorningBriefing: ctx.isMorningBriefing } }];"
+      },
+      "id": "call-haiku",
+      "name": "Call Claude Haiku",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "not-skip",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "SKIP",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-should-send",
+      "name": "Should Send",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "{{TELEGRAM_CHAT_ID}}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-send",
+      "name": "Telegram Send",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Update heartbeat_config last_run\nconst SUPABASE_URL = '{{SUPABASE_URL}}';\nconst SUPABASE_KEY = '{{SUPABASE_SERVICE_KEY}}';\nconst http = this.helpers.httpRequest;\n\nconst reason = $('Call Claude Haiku').first().json.reason || 'proactive';\nconst checkName = reason === 'morning_briefing' ? 'morning_briefing' : 'heartbeat';\n\nawait http({\n  method: 'PATCH',\n  url: `${SUPABASE_URL}/rest/v1/heartbeat_config?check_name=eq.${checkName}`,\n  headers: {\n    'apikey': SUPABASE_KEY,\n    'Content-Type': 'application/json',\n    'Prefer': 'return=minimal'\n  },\n  body: { last_run: new Date().toISOString() }\n});\n\nreturn [{ json: { status: 'sent', check_name: checkName, timestamp: new Date().toISOString() } }];"
+      },
+      "id": "update-heartbeat",
+      "name": "Update Heartbeat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 0]
+    }
+  ]
+}
