@@ -52,7 +52,6 @@ Add this repository URL to HA → Settings → Add-ons → Add-on Store → ⋮ 
 | `db_name` | `n8n-claw` | Database name |
 | `db_user` | `postgres` | Database user |
 | `db_password` | _(required)_ | Database password |
-| `postgrest_jwt_secret` | _(optional)_ | JWT secret for PostgREST auth. If empty, PostgREST runs without auth (safe — internal only) |
 | `telegram_bot_token` | _(optional)_ | Telegram bot token for the agent interface |
 | `telegram_chat_id` | _(optional)_ | Your Telegram chat ID |
 | `anthropic_api_key` | _(optional)_ | Anthropic API key (Claude) |

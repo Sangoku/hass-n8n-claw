@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-03-27
+
+### Removed
+- `postgrest_jwt_secret` option — PostgREST is internal-only; JWT auth is not needed
+
 ## [1.0.0] - 2026-03-23
 
 ### Added

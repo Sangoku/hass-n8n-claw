@@ -1,6 +1,6 @@
 {
   "name": "n8n-claw",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "slug": "hass-n8n-claw",
   "description": "n8n AI agent (n8n-claw) as a Home Assistant addon — includes PostgREST, auto-migration and workflow import",
   "url": "https://github.com/Sangoku/hass-n8n-claw",
@@ -49,7 +49,6 @@
     "db_name": "n8n-claw",
     "db_user": "postgres",
     "db_password": "",
-    "postgrest_jwt_secret": "",
     "telegram_bot_token": "",
     "telegram_chat_id": "",
     "anthropic_api_key": "",
@@ -67,7 +66,6 @@
     "db_name": "str",
     "db_user": "str",
     "db_password": "str",
-    "postgrest_jwt_secret": "str",
     "telegram_bot_token": "str",
     "telegram_chat_id": "str",
     "anthropic_api_key": "str",

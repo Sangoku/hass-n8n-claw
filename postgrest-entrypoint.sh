@@ -11,16 +11,7 @@ export PGRST_DB_USE_LEGACY_GUCS="false"
 # Allow PostgREST to serve all tables in the public schema
 export PGRST_DB_EXTRA_SEARCH_PATH="public"
 
-# JWT secret from options (used by n8n workflows to authenticate to PostgREST)
-# If empty, PostgREST runs without JWT auth (safe since it's internal-only)
-JWT_SECRET="$(jq --raw-output '.postgrest_jwt_secret // empty' /data/options.json)"
-if [ -n "$JWT_SECRET" ]; then
-    export PGRST_JWT_SECRET="$JWT_SECRET"
-    echo "postgrest: JWT auth enabled"
-else
-    echo "postgrest: JWT auth disabled (internal-only mode)"
-fi
-
+echo "postgrest: JWT auth disabled (internal-only mode)"
 echo "postgrest: connecting to ${DB_POSTGRESDB_HOST}:${DB_POSTGRESDB_PORT}/${DB_POSTGRESDB_DATABASE}"
 echo "postgrest: listening on :3000"
 
