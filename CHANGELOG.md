@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-03-27
+
+### Changed
+- **LLM provider is now OpenAI-compatible** — no longer locked to Anthropic/Claude
+  - `anthropic_api_key` config option replaced with `llm_api_key` + `llm_base_url` + `llm_model`
+  - Works with OpenAI, LiteLLM, Ollama, OpenRouter, or any OpenAI-compatible endpoint
+  - n8n LangChain nodes changed from `lmChatAnthropic` to `lmChatOpenAi` with configurable `baseUrl`
+  - Heartbeat and Memory Consolidation code nodes now call `{base_url}/chat/completions` (OpenAI format)
+  - `tools_config` DB entry renamed from `anthropic` to `llm` with `{api_key, base_url, model}` shape
+- DB migration `003_llm_config.sql` added — upgrades existing installs automatically
+
 ## [1.0.1] - 2026-03-27
 
 ### Changed

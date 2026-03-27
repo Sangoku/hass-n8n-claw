@@ -22,7 +22,11 @@ Database is provided by the **Expaso TimescaleDB** HA addon (peer addon — sepa
    - Expose port `5432` on the host
    - Allow connections from `172.30.32.0/24` in `pg_hba_config`
 
-2. **Anthropic API key** (for Claude AI — the agent's brain)
+2. **LLM API key + endpoint** — any OpenAI-compatible provider:
+   - **OpenAI**: `llm_base_url=https://api.openai.com/v1`, `llm_model=gpt-4o`
+   - **LiteLLM proxy**: `llm_base_url=http://litellm:4000/v1`, any model
+   - **Ollama** (local): `llm_base_url=http://host:11434/v1`, `llm_model=llama3.2`, `llm_api_key=ollama`
+   - **OpenRouter**: `llm_base_url=https://openrouter.ai/api/v1`, `llm_model=anthropic/claude-3.5-sonnet`
 
 3. **Telegram Bot token + chat ID** (for the Telegram interface)
 
@@ -52,11 +56,43 @@ Add this repository URL to HA → Settings → Add-ons → Add-on Store → ⋮ 
 | `db_name` | `n8n-claw` | Database name |
 | `db_user` | `postgres` | Database user |
 | `db_password` | _(required)_ | Database password |
-| `anthropic_api_key` | _(optional)_ | Anthropic API key (Claude) |
+| `llm_api_key` | _(optional)_ | API key for your LLM provider (empty for local Ollama) |
+| `llm_base_url` | `https://api.openai.com/v1` | OpenAI-compatible base URL (LiteLLM, Ollama, OpenRouter, etc.) |
+| `llm_model` | `gpt-4o-mini` | Model name to use (e.g. `gpt-4o`, `llama3.2`, `claude-3-5-sonnet`) |
 | `n8n_encryption_key` | _(optional)_ | n8n encryption key. Auto-generated if empty (persisted in `/data/n8n-claw/.n8n/`) |
 | `n8n_webhook_url` | _(optional)_ | External webhook URL (e.g. `https://your-ha.duckdns.org:8081`) |
 | `env_vars_list` | `[]` | Additional environment variables in `KEY: value` format |
 | `cmd_line_args` | _(optional)_ | Extra CLI args passed to `n8n` |
+
+### LLM Provider Examples
+
+**OpenAI:**
+```yaml
+llm_api_key: "sk-..."
+llm_base_url: "https://api.openai.com/v1"
+llm_model: "gpt-4o"
+```
+
+**LiteLLM proxy (self-hosted, routes to any provider):**
+```yaml
+llm_api_key: "sk-..."
+llm_base_url: "http://172.30.32.1:4000/v1"
+llm_model: "claude-3-5-sonnet"
+```
+
+**Ollama (local, no API key needed):**
+```yaml
+llm_api_key: "ollama"
+llm_base_url: "http://172.30.32.1:11434/v1"
+llm_model: "llama3.2"
+```
+
+**OpenRouter:**
+```yaml
+llm_api_key: "sk-or-..."
+llm_base_url: "https://openrouter.ai/api/v1"
+llm_model: "anthropic/claude-3.5-sonnet"
+```
 
 ### Important: N8N_API_KEY
 
