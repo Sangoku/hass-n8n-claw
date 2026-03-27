@@ -4,8 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [1.0.1] - 2026-03-27
 
+### Changed
+- Telegram is now optional and configured inside the n8n workflow UI (n8n → Credentials → Telegram Bot). `telegram_bot_token` and `telegram_chat_id` have been removed from the addon config options.
+
 ### Removed
 - `postgrest_jwt_secret` option — PostgREST is internal-only; JWT auth is not needed
+- `telegram_bot_token` and `telegram_chat_id` addon config options — configure Telegram directly in the n8n workflow
 
 ## [1.0.0] - 2026-03-23
 

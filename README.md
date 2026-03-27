@@ -52,8 +52,6 @@ Add this repository URL to HA → Settings → Add-ons → Add-on Store → ⋮ 
 | `db_name` | `n8n-claw` | Database name |
 | `db_user` | `postgres` | Database user |
 | `db_password` | _(required)_ | Database password |
-| `telegram_bot_token` | _(optional)_ | Telegram bot token for the agent interface |
-| `telegram_chat_id` | _(optional)_ | Your Telegram chat ID |
 | `anthropic_api_key` | _(optional)_ | Anthropic API key (Claude) |
 | `n8n_encryption_key` | _(optional)_ | n8n encryption key. Auto-generated if empty (persisted in `/data/n8n-claw/.n8n/`) |
 | `n8n_webhook_url` | _(optional)_ | External webhook URL (e.g. `https://your-ha.duckdns.org:8081`) |
@@ -197,7 +195,8 @@ Home Assistant OS
 
 ### Workflows not activating
 - Some workflows require credentials to be set before activation
-- Set `telegram_bot_token`, `anthropic_api_key` in the addon config
+- Set `anthropic_api_key` in the addon config
+- For Telegram: configure the bot token and chat ID directly in the n8n workflow UI (n8n → Credentials → Telegram Bot)
 - Restart the addon to re-run workflow-import (delete `/data/n8n-claw/.workflows_imported` first)
 
 ### Re-run workflow import

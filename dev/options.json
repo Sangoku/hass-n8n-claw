@@ -5,8 +5,6 @@
   "db_name": "n8n_claw",
   "db_user": "postgres",
   "db_password": "postgres",
-  "telegram_bot_token": "",
-  "telegram_chat_id": "",
   "anthropic_api_key": "",
   "n8n_encryption_key": "",
   "n8n_webhook_url": "http://localhost:8081",

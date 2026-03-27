@@ -9,8 +9,6 @@ N8N_BASE="http://localhost:5678"
 WORKDIR="/tmp/wf-deploy"
 
 # ── Read config ──────────────────────────────────────────────
-TELEGRAM_BOT_TOKEN="$(jq -r '.telegram_bot_token // empty' $CONFIG_PATH)"
-TELEGRAM_CHAT_ID="$(jq -r '.telegram_chat_id // empty' $CONFIG_PATH)"
 ANTHROPIC_API_KEY="$(jq -r '.anthropic_api_key // empty' $CONFIG_PATH)"
 DB_HOST="$(jq -r '.db_host // "172.30.32.1"' $CONFIG_PATH)"
 DB_PORT="$(jq -r '.db_port // 5432' $CONFIG_PATH)"
@@ -175,13 +173,6 @@ create_cred_if_missing() {
     echo "$NEW_ID"
 }
 
-# Telegram credential
-TELEGRAM_CRED_ID=""
-if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-    TELEGRAM_CRED_ID=$(create_cred_if_missing "telegramApi" "Telegram Bot" \
-        "{\"accessToken\":\"${TELEGRAM_BOT_TOKEN}\"}" | tail -1)
-fi
-
 # Postgres credential (points to TimescaleDB addon via host gateway)
 POSTGRES_CRED_ID=$(create_cred_if_missing "postgres" "Supabase Postgres" \
     "{\"host\":\"${DB_HOST}\",\"database\":\"${DB_NAME}\",\"user\":\"${DB_USER}\",\"password\":\"${DB_PASSWORD}\",\"port\":${DB_PORT},\"ssl\":\"disable\",\"allowUnauthorizedCerts\":true,\"sshTunnel\":false}" | tail -1)
@@ -194,7 +185,6 @@ if [ -n "$ANTHROPIC_API_KEY" ]; then
 fi
 
 echo "workflow-import: credentials done."
-echo "  Telegram:  ${TELEGRAM_CRED_ID:-not set}"
 echo "  Postgres:  ${POSTGRES_CRED_ID:-not set}"
 echo "  Anthropic: ${ANTHROPIC_CRED_ID:-not set}"
 
@@ -214,16 +204,14 @@ for src in /app/workflows/*.json; do
         -e "s|{{SUPABASE_URL}}|${SUPABASE_URL}|g" \
         -e "s|{{SUPABASE_SERVICE_KEY}}||g" \
         -e "s|{{SUPABASE_ANON_KEY}}||g" \
-        -e "s|{{TELEGRAM_CHAT_ID}}|${TELEGRAM_CHAT_ID}|g" \
+        -e "s|{{TELEGRAM_CHAT_ID}}||g" \
         -e "s|{{CREDENTIAL_FORM_WEBHOOK_ID}}|${CREDENTIAL_FORM_WEBHOOK_ID}|g" \
         "$dst"
 
     # Replace credential ID placeholders — use real ID if available, else clear placeholder
     # (leaving REPLACE_WITH_YOUR_CREDENTIAL_ID causes activation failure in n8n)
-    TELE_REPLACE="${TELEGRAM_CRED_ID:-}"
     PG_REPLACE="${POSTGRES_CRED_ID:-}"
     ANTH_REPLACE="${ANTHROPIC_CRED_ID:-}"
-    sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Telegram Bot\"|${TELE_REPLACE}\", \"name\": \"Telegram Bot\"|g" "$dst"
     sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Supabase Postgres\"|${PG_REPLACE}\", \"name\": \"Supabase Postgres\"|g" "$dst"
     sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Anthropic API\"|${ANTH_REPLACE}\", \"name\": \"Anthropic API\"|g" "$dst"
     # Catch-all: clear any remaining REPLACE_WITH_YOUR_CREDENTIAL_ID placeholders
