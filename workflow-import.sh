@@ -18,6 +18,10 @@ DB_NAME="$(jq -r '.db_name // "n8n-claw"' $CONFIG_PATH)"
 DB_USER="$(jq -r '.db_user // "postgres"' $CONFIG_PATH)"
 DB_PASSWORD="$(jq -r '.db_password // empty' $CONFIG_PATH)"
 WEBHOOK_URL_OPT="$(jq -r '.n8n_webhook_url // empty' $CONFIG_PATH)"
+DISCORD_BOT_TOKEN="$(jq -r '.discord_bot_token // empty' $CONFIG_PATH)"
+DISCORD_CHANNEL_ID="$(jq -r '.discord_channel_id // empty' $CONFIG_PATH)"
+TELEGRAM_BOT_TOKEN="$(jq -r '.telegram_bot_token // empty' $CONFIG_PATH)"
+TELEGRAM_CHAT_ID="$(jq -r '.telegram_chat_id // empty' $CONFIG_PATH)"
 
 # ── Wait for n8n API ─────────────────────────────────────────
 echo "workflow-import: waiting for n8n API at ${N8N_BASE}..."
@@ -186,9 +190,25 @@ if [ -n "$LLM_API_KEY" ] || [ -n "$LLM_BASE_URL" ]; then
         "{\"apiKey\":\"${LLM_API_KEY}\",\"baseUrl\":\"${LLM_BASE_URL}\"}" | tail -1)
 fi
 
+# Discord Bot credential
+DISCORD_CRED_ID=""
+if [ -n "$DISCORD_BOT_TOKEN" ]; then
+    DISCORD_CRED_ID=$(create_cred_if_missing "discordBotApi" "Discord Bot" \
+        "{\"botToken\":\"${DISCORD_BOT_TOKEN}\"}" | tail -1)
+fi
+
+# Telegram Bot credential (for telegram-bridge workflow)
+TELEGRAM_CRED_ID=""
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+    TELEGRAM_CRED_ID=$(create_cred_if_missing "telegramApi" "Telegram Bot" \
+        "{\"accessToken\":\"${TELEGRAM_BOT_TOKEN}\"}" | tail -1)
+fi
+
 echo "workflow-import: credentials done."
 echo "  Postgres:  ${POSTGRES_CRED_ID:-not set}"
 echo "  LLM:       ${LLM_CRED_ID:-not set} (${LLM_BASE_URL:-default})"
+echo "  Discord:   ${DISCORD_CRED_ID:-not set}"
+echo "  Telegram:  ${TELEGRAM_CRED_ID:-not set}"
 
 # ── Step 2: Prepare workflow files (placeholder replacement) ──
 echo "workflow-import: preparing workflow files..."
@@ -206,7 +226,9 @@ for src in /app/workflows/*.json; do
         -e "s|{{SUPABASE_URL}}|${SUPABASE_URL}|g" \
         -e "s|{{SUPABASE_SERVICE_KEY}}||g" \
         -e "s|{{SUPABASE_ANON_KEY}}||g" \
-        -e "s|{{TELEGRAM_CHAT_ID}}||g" \
+        -e "s|{{DISCORD_CHANNEL_ID}}|${DISCORD_CHANNEL_ID}|g" \
+        -e "s|{{TELEGRAM_BOT_TOKEN}}|${TELEGRAM_BOT_TOKEN}|g" \
+        -e "s|{{TELEGRAM_CHAT_ID}}|${TELEGRAM_CHAT_ID}|g" \
         -e "s|{{CREDENTIAL_FORM_WEBHOOK_ID}}|${CREDENTIAL_FORM_WEBHOOK_ID}|g" \
         -e "s|{{LLM_MODEL}}|${LLM_MODEL}|g" \
         "$dst"
@@ -215,10 +237,16 @@ for src in /app/workflows/*.json; do
     # (leaving REPLACE_WITH_YOUR_CREDENTIAL_ID causes activation failure in n8n)
     PG_REPLACE="${POSTGRES_CRED_ID:-}"
     LLM_REPLACE="${LLM_CRED_ID:-}"
+    DISCORD_REPLACE="${DISCORD_CRED_ID:-}"
+    TELEGRAM_REPLACE="${TELEGRAM_CRED_ID:-}"
     sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"Supabase Postgres\"|${PG_REPLACE}\", \"name\": \"Supabase Postgres\"|g" "$dst"
     sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID\", \"name\": \"OpenAI Compatible LLM\"|${LLM_REPLACE}\", \"name\": \"OpenAI Compatible LLM\"|g" "$dst"
+    sed -i "s|REPLACE_WITH_YOUR_DISCORD_CREDENTIAL_ID\", \"name\": \"Discord Bot\"|${DISCORD_REPLACE}\", \"name\": \"Discord Bot\"|g" "$dst"
+    sed -i "s|REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID\", \"name\": \"Telegram Bot\"|${TELEGRAM_REPLACE}\", \"name\": \"Telegram Bot\"|g" "$dst"
     # Catch-all: clear any remaining REPLACE_WITH_YOUR_CREDENTIAL_ID placeholders
     sed -i "s|REPLACE_WITH_YOUR_CREDENTIAL_ID||g" "$dst"
+    sed -i "s|REPLACE_WITH_YOUR_DISCORD_CREDENTIAL_ID||g" "$dst"
+    sed -i "s|REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID||g" "$dst"
 done
 echo "workflow-import: placeholder replacement done."
 
@@ -227,7 +255,7 @@ echo "workflow-import: importing workflows..."
 
 # Import order matters — dependencies first
 # ha-bridge must come after n8n-claw-agent (needs agent ID for patching)
-IMPORT_ORDER="mcp-client reminder-factory reminder-runner mcp-weather-example workflow-builder mcp-builder mcp-library-manager credential-form memory-consolidation heartbeat n8n-claw-agent ha-bridge"
+IMPORT_ORDER="mcp-client reminder-factory reminder-runner mcp-weather-example workflow-builder mcp-builder mcp-library-manager credential-form memory-consolidation heartbeat n8n-claw-agent ha-bridge telegram-bridge"
 
 # Fetch existing workflows once
 EXISTING_WFS=$(curl -s "${N8N_BASE}/api/v1/workflows?limit=100" \
@@ -330,6 +358,25 @@ if [ -n "$REMINDER_RUNNER_WF_ID" ] && [ -n "$AGENT_WF_ID" ]; then
     fi
 fi
 
+# ── Step 5b: Patch agent ID in telegram-bridge ───────────────
+TELEGRAM_BRIDGE_WF_ID="${WF_IDS[telegram-bridge]}"
+if [ -n "$TELEGRAM_BRIDGE_WF_ID" ] && [ -n "$AGENT_WF_ID" ]; then
+    BRIDGE_JSON=$(curl -s "${N8N_BASE}/api/v1/workflows/${TELEGRAM_BRIDGE_WF_ID}" \
+        -H "X-N8N-API-KEY: ${N8N_API_KEY}")
+
+    PATCHED_BRIDGE=$(echo "$BRIDGE_JSON" \
+        | sed "s|REPLACE_AGENT_WORKFLOW_ID|${AGENT_WF_ID}|g" \
+        | jq '{name: .name, nodes: (.nodes // []), connections: (.connections // {}), settings: (.settings // {})}' 2>/dev/null)
+
+    if [ -n "$PATCHED_BRIDGE" ]; then
+        curl -s -X PUT "${N8N_BASE}/api/v1/workflows/${TELEGRAM_BRIDGE_WF_ID}" \
+            -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$PATCHED_BRIDGE" > /dev/null
+        echo "  ✅ Telegram Bridge → Agent: ${AGENT_WF_ID}"
+    fi
+fi
+
 # ── Step 6: Activate workflows ───────────────────────────────
 echo "workflow-import: activating workflows..."
 
@@ -359,6 +406,7 @@ activate_wf "${WF_IDS[heartbeat]}"          "Heartbeat"
 activate_wf "${WF_IDS[memory-consolidation]}" "Memory Consolidation"
 activate_wf "${WF_IDS[credential-form]}"   "Credential Form"
 activate_wf "${WF_IDS[reminder-runner]}"   "Reminder Runner"
+activate_wf "${WF_IDS[telegram-bridge]}"   "Telegram Bridge"
 
 # ── Done ─────────────────────────────────────────────────────
 touch "$SENTINEL"

@@ -1,6 +1,6 @@
 {
   "name": "n8n-claw",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "slug": "hass-n8n-claw",
   "description": "n8n AI agent (n8n-claw) as a Home Assistant addon — includes PostgREST, auto-migration and workflow import",
   "url": "https://github.com/Sangoku/hass-n8n-claw",
@@ -39,7 +39,7 @@
   },
   "ports_description": {
     "5678/tcp": "n8n direct port (optional — use Ingress instead for security)",
-    "8081/tcp": "n8n webhook/API port for external integrations (Telegram, etc.)"
+    "8081/tcp": "n8n webhook/API port for external integrations (Discord, Telegram, etc.)"
   },
   "apparmor": true,
   "options": {
@@ -56,6 +56,10 @@
     "n8n_webhook_url": "",
     "n8n_owner_email": "admin@n8n-claw.local",
     "n8n_owner_password": "",
+    "discord_bot_token": "",
+    "discord_channel_id": "",
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
     "env_vars_list": [],
     "cmd_line_args": ""
   },
@@ -73,6 +77,10 @@
     "n8n_webhook_url": "str?",
     "n8n_owner_email": "str?",
     "n8n_owner_password": "str?",
+    "discord_bot_token": "str?",
+    "discord_channel_id": "str?",
+    "telegram_bot_token": "str?",
+    "telegram_chat_id": "str?",
     "env_vars_list": [
       "match(^[A-Z_0-9]+: .*$)"
     ],

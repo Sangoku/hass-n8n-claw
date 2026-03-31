@@ -52,14 +52,14 @@
       "main": [
         [
           {
-            "node": "Telegram Send",
+            "node": "Discord Send",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Telegram Send": {
+    "Discord Send": {
       "main": [
         [
           {
@@ -92,7 +92,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Load tasks, user preferences, heartbeat state, and recent memories\nconst SUPABASE_URL = '{{SUPABASE_URL}}';\nconst SUPABASE_KEY = '{{SUPABASE_SERVICE_KEY}}';\nconst CHAT_ID = '{{TELEGRAM_CHAT_ID}}';\nconst http = this.helpers.httpRequest;\n\nasync function pgrest(path) {\n  const res = await http({\n    method: 'GET',\n    url: `${SUPABASE_URL}${path}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true\n  });\n  return typeof res.body === 'string' ? JSON.parse(res.body) : res.body;\n}\n\nconst userId = `telegram:${CHAT_ID}`;\n\n// Load all context in parallel\nconst [tasks, profiles, heartbeatCfg, briefingCfg, recentMemory, soul] = await Promise.all([\n  pgrest(`/rest/v1/tasks?user_id=eq.${encodeURIComponent(userId)}&status=in.(pending,in_progress)&order=due_date.asc.nullslast,priority.desc`),\n  pgrest(`/rest/v1/user_profiles?user_id=eq.${encodeURIComponent(userId)}&select=display_name,timezone,preferences`),\n  pgrest('/rest/v1/heartbeat_config?check_name=eq.heartbeat&select=config,last_run,enabled'),\n  pgrest('/rest/v1/heartbeat_config?check_name=eq.morning_briefing&select=config,last_run,enabled'),\n  pgrest('/rest/v1/memory_long?order=created_at.desc&limit=3&select=content,category'),\n  pgrest('/rest/v1/soul?key=eq.name&select=content')\n]);\n\nconst profile = (Array.isArray(profiles) && profiles.length > 0) ? profiles[0] : {};\nconst prefs = profile.preferences || {};\nconst tz = profile.timezone || 'Europe/Berlin';\nconst botName = (Array.isArray(soul) && soul.length > 0) ? soul[0].content : 'Assistant';\n\n// Current time in user's timezone\nconst now = new Date();\nconst userTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));\nconst currentHour = userTime.getHours();\nconst currentMinute = userTime.getMinutes();\n\n// Heartbeat state\nconst hbEnabled = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0) ? heartbeatCfg[0].enabled : false;\nconst hbLastRun = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0 && heartbeatCfg[0].last_run) ? new Date(heartbeatCfg[0].last_run) : null;\nconst hbMinInterval = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0 && heartbeatCfg[0].config) ? (heartbeatCfg[0].config.min_interval_hours || 2) : 2;\n\n// Morning briefing state\nconst mbEnabled = (Array.isArray(briefingCfg) && briefingCfg.length > 0) ? briefingCfg[0].enabled : false;\nconst mbLastRun = (Array.isArray(briefingCfg) && briefingCfg.length > 0 && briefingCfg[0].last_run) ? new Date(briefingCfg[0].last_run) : null;\nconst mbPrefs = prefs.morning_briefing || {};\nconst mbTime = mbPrefs.time || '08:00';\nconst [mbHour, mbMinute] = mbTime.split(':').map(Number);\n\n// Categorize tasks\nconst overdue = (Array.isArray(tasks) ? tasks : []).filter(t => t.due_date && new Date(t.due_date) < now);\nconst dueToday = (Array.isArray(tasks) ? tasks : []).filter(t => {\n  if (!t.due_date) return false;\n  const d = new Date(t.due_date);\n  return d.toDateString() === userTime.toDateString() && d >= now;\n});\nconst urgent = (Array.isArray(tasks) ? tasks : []).filter(t => t.priority === 'urgent');\n\n// Check if morning briefing should fire\nlet shouldBrief = false;\nlet briefingReason = '';\nif (mbEnabled && mbPrefs.enabled) {\n  const timeDiff = (currentHour * 60 + currentMinute) - (mbHour * 60 + mbMinute);\n  const isInWindow = timeDiff >= 0 && timeDiff < 15;\n  const alreadyBriefedToday = mbLastRun && mbLastRun.toDateString() === userTime.toDateString();\n  const mbHoursSinceLastRun = mbLastRun ? (now.getTime() - mbLastRun.getTime()) / (1000 * 60 * 60) : 999;\n  if (isInWindow && !alreadyBriefedToday && mbHoursSinceLastRun >= 1) {\n    shouldBrief = true;\n    briefingReason = 'morning_briefing';\n  }\n}\n\n// Check if proactive message should fire (rate-limited)\nlet shouldProactive = false;\nif (hbEnabled && !shouldBrief) {\n  const hoursSinceLastRun = hbLastRun ? (now.getTime() - hbLastRun.getTime()) / (1000 * 60 * 60) : 999;\n  if (hoursSinceLastRun >= hbMinInterval) {\n    if (overdue.length > 0 || urgent.length > 0) {\n      shouldProactive = true;\n    }\n  }\n}\n\nreturn [{ json: {\n  hasAction: shouldBrief || shouldProactive,\n  reason: shouldBrief ? briefingReason : (shouldProactive ? 'proactive' : 'none'),\n  botName,\n  userName: profile.display_name || 'User',\n  timezone: tz,\n  currentTime: userTime.toISOString(),\n  tasks: Array.isArray(tasks) ? tasks : [],\n  overdue: overdue.map(t => ({ id: t.id, title: t.title, priority: t.priority, due_date: t.due_date })),\n  dueToday: dueToday.map(t => ({ id: t.id, title: t.title, priority: t.priority, due_date: t.due_date })),\n  urgent: urgent.map(t => ({ id: t.id, title: t.title, due_date: t.due_date })),\n  totalPending: Array.isArray(tasks) ? tasks.length : 0,\n  recentMemory: Array.isArray(recentMemory) ? recentMemory.map(m => m.content) : [],\n  isMorningBriefing: shouldBrief,\n  language: prefs.language || 'English'\n}}];"
+        "jsCode": "// Load tasks, user preferences, heartbeat state, and recent memories\nconst SUPABASE_URL = '{{SUPABASE_URL}}';\nconst SUPABASE_KEY = '{{SUPABASE_SERVICE_KEY}}';\nconst CHAT_ID = '{{DISCORD_CHANNEL_ID}}';\nconst http = this.helpers.httpRequest;\n\nasync function pgrest(path) {\n  const res = await http({\n    method: 'GET',\n    url: `${SUPABASE_URL}${path}`,\n    headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true\n  });\n  return typeof res.body === 'string' ? JSON.parse(res.body) : res.body;\n}\n\nconst userId = `discord:${CHAT_ID}`;\n\n// Load all context in parallel\nconst [tasks, profiles, heartbeatCfg, briefingCfg, recentMemory, soul] = await Promise.all([\n  pgrest(`/rest/v1/tasks?user_id=eq.${encodeURIComponent(userId)}&status=in.(pending,in_progress)&order=due_date.asc.nullslast,priority.desc`),\n  pgrest(`/rest/v1/user_profiles?user_id=eq.${encodeURIComponent(userId)}&select=display_name,timezone,preferences`),\n  pgrest('/rest/v1/heartbeat_config?check_name=eq.heartbeat&select=config,last_run,enabled'),\n  pgrest('/rest/v1/heartbeat_config?check_name=eq.morning_briefing&select=config,last_run,enabled'),\n  pgrest('/rest/v1/memory_long?order=created_at.desc&limit=3&select=content,category'),\n  pgrest('/rest/v1/soul?key=eq.name&select=content')\n]);\n\nconst profile = (Array.isArray(profiles) && profiles.length > 0) ? profiles[0] : {};\nconst prefs = profile.preferences || {};\nconst tz = profile.timezone || 'Europe/Berlin';\nconst botName = (Array.isArray(soul) && soul.length > 0) ? soul[0].content : 'Assistant';\n\n// Current time in user's timezone\nconst now = new Date();\nconst userTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));\nconst currentHour = userTime.getHours();\nconst currentMinute = userTime.getMinutes();\n\n// Heartbeat state\nconst hbEnabled = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0) ? heartbeatCfg[0].enabled : false;\nconst hbLastRun = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0 && heartbeatCfg[0].last_run) ? new Date(heartbeatCfg[0].last_run) : null;\nconst hbMinInterval = (Array.isArray(heartbeatCfg) && heartbeatCfg.length > 0 && heartbeatCfg[0].config) ? (heartbeatCfg[0].config.min_interval_hours || 2) : 2;\n\n// Morning briefing state\nconst mbEnabled = (Array.isArray(briefingCfg) && briefingCfg.length > 0) ? briefingCfg[0].enabled : false;\nconst mbLastRun = (Array.isArray(briefingCfg) && briefingCfg.length > 0 && briefingCfg[0].last_run) ? new Date(briefingCfg[0].last_run) : null;\nconst mbPrefs = prefs.morning_briefing || {};\nconst mbTime = mbPrefs.time || '08:00';\nconst [mbHour, mbMinute] = mbTime.split(':').map(Number);\n\n// Categorize tasks\nconst overdue = (Array.isArray(tasks) ? tasks : []).filter(t => t.due_date && new Date(t.due_date) < now);\nconst dueToday = (Array.isArray(tasks) ? tasks : []).filter(t => {\n  if (!t.due_date) return false;\n  const d = new Date(t.due_date);\n  return d.toDateString() === userTime.toDateString() && d >= now;\n});\nconst urgent = (Array.isArray(tasks) ? tasks : []).filter(t => t.priority === 'urgent');\n\n// Check if morning briefing should fire\nlet shouldBrief = false;\nlet briefingReason = '';\nif (mbEnabled && mbPrefs.enabled) {\n  const timeDiff = (currentHour * 60 + currentMinute) - (mbHour * 60 + mbMinute);\n  const isInWindow = timeDiff >= 0 && timeDiff < 15;\n  const alreadyBriefedToday = mbLastRun && mbLastRun.toDateString() === userTime.toDateString();\n  const mbHoursSinceLastRun = mbLastRun ? (now.getTime() - mbLastRun.getTime()) / (1000 * 60 * 60) : 999;\n  if (isInWindow && !alreadyBriefedToday && mbHoursSinceLastRun >= 1) {\n    shouldBrief = true;\n    briefingReason = 'morning_briefing';\n  }\n}\n\n// Check if proactive message should fire (rate-limited)\nlet shouldProactive = false;\nif (hbEnabled && !shouldBrief) {\n  const hoursSinceLastRun = hbLastRun ? (now.getTime() - hbLastRun.getTime()) / (1000 * 60 * 60) : 999;\n  if (hoursSinceLastRun >= hbMinInterval) {\n    if (overdue.length > 0 || urgent.length > 0) {\n      shouldProactive = true;\n    }\n  }\n}\n\nreturn [{ json: {\n  hasAction: shouldBrief || shouldProactive,\n  reason: shouldBrief ? briefingReason : (shouldProactive ? 'proactive' : 'none'),\n  botName,\n  userName: profile.display_name || 'User',\n  timezone: tz,\n  currentTime: userTime.toISOString(),\n  tasks: Array.isArray(tasks) ? tasks : [],\n  overdue: overdue.map(t => ({ id: t.id, title: t.title, priority: t.priority, due_date: t.due_date })),\n  dueToday: dueToday.map(t => ({ id: t.id, title: t.title, priority: t.priority, due_date: t.due_date })),\n  urgent: urgent.map(t => ({ id: t.id, title: t.title, due_date: t.due_date })),\n  totalPending: Array.isArray(tasks) ? tasks.length : 0,\n  recentMemory: Array.isArray(recentMemory) ? recentMemory.map(m => m.content) : [],\n  isMorningBriefing: shouldBrief,\n  language: prefs.language || 'English'\n}}];"
       },
       "id": "load-context",
       "name": "Load Context",
@@ -169,21 +169,24 @@
     },
     {
       "parameters": {
-        "chatId": "{{TELEGRAM_CHAT_ID}}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "Markdown"
-        }
+        "operation": "message",
+        "channelId": {
+          "__rl": true,
+          "value": "={{DISCORD_CHANNEL_ID}}",
+          "mode": "id"
+        },
+        "content": "={{ $json.message }}",
+        "options": {}
       },
-      "id": "telegram-send",
-      "name": "Telegram Send",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "id": "discord-send",
+      "name": "Discord Send",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
       "position": [1100, 0],
       "credentials": {
-        "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+        "discordBotApi": {
+          "id": "REPLACE_WITH_YOUR_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Bot"
         }
       }
     },

@@ -208,24 +208,27 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chat_id }}",
-        "text": "=\u23f0 {{ $json.message }}",
-        "additionalFields": {
-          "appendAttribution": false
-        }
+        "operation": "message",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.chat_id }}",
+          "mode": "id"
+        },
+        "content": "=⏰ {{ $json.message }}",
+        "options": {}
       },
       "name": "Send Messages",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
       "position": [
         896,
         -120
       ],
       "id": "send-01",
       "credentials": {
-        "telegramApi": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+        "discordBotApi": {
+          "id": "REPLACE_WITH_YOUR_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Bot"
         }
       }
     },
